@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Staff Dashboard</title>
+</head>
+<body>
+<h2>Reimbursement Requests</h2>
+
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Student</th>
+        <th>Receipt</th>
+        <th>Comment</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+
+    {% for r in requests %}
+    <tr>
+        <td>{{ r[0] }}</td>
+        <td>{{ r[1] }}</td>
+        <td><a href="/static/uploads/{{ r[2] }}" target="_blank">View</a></td>
+        <td>{{ r[3] }}</td>
+        <td>{{ r[4] }}</td>
+        <td>
+            <a href="/review_request/{{ r[0] }}/approve">Approve</a> |
+            <a href="/review_request/{{ r[0] }}/reject">Reject</a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+</body>
+</html>
