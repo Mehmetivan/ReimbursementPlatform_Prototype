@@ -1,154 +1,176 @@
-from flask import Flask, render_template, request, redirect, session, url_for
-import sqlite3
-import os
+from flask import Flask, render_template, request, redirect, url_for, session
+import sqlite3, os
 
 app = Flask(__name__)
-app.secret_key = "secret_key_123"
+app.secret_key = "supersecret"
 
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-
-# ---------------------- DATABASE INIT ----------------------
+# --------------------------
+# DATABASE INITIALIZATION
+# --------------------------
 def init_db():
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            bank_details TEXT
+            email TEXT PRIMARY KEY,
+            password TEXT,
+            role TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            email TEXT PRIMARY KEY,
+            name TEXT,
+            iban TEXT
         )
     """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            receipt_file TEXT NOT NULL,
+            student_email TEXT,
+            filename TEXT,
             comment TEXT,
-            status TEXT DEFAULT 'Pending',
-            FOREIGN KEY(student_id) REFERENCES users(id)
+            status TEXT DEFAULT 'Pending'
         )
     """)
 
-    # Insert sample users if they don't exist
-    try:
-        c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, ?)", 
-                  ("student1@uni.com", "1234", "student"))
-        c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, ?)", 
-                  ("staff1@uni.com", "1234", "staff"))
-    except:
-        pass
+    # Seed users if empty
+    c.execute("SELECT COUNT(*) FROM users")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO users VALUES ('student@uni.ro', '123', 'student')")
+        c.execute("INSERT INTO users VALUES ('staff@uni.ro', '123', 'staff')")
 
     conn.commit()
     conn.close()
 
+init_db()
 
-# ---------------------- LOGIN ROUTES ----------------------
+# --------------------------
+# ROUTES
+# --------------------------
 @app.route("/")
-def home():
+def index():
     return redirect("/login")
-
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form["email"]
         password = request.form["password"]
-        role = request.form["role"]
 
         conn = sqlite3.connect("database.db")
         c = conn.cursor()
-        c.execute("SELECT id FROM users WHERE email=? AND password=? AND role=?", 
-                  (email, password, role))
+        c.execute("SELECT email, role FROM users WHERE email=? AND password=?", (email, password))
         user = c.fetchone()
         conn.close()
 
         if user:
-            session["user_id"] = user[0]
-            session["role"] = role
+            session["email"] = user[0]
+            session["role"] = user[1]
 
-            if role == "student":
-                return redirect("/student_dashboard")
+            if user[1] == "student":
+                return redirect("/student")
             else:
-                return redirect("/staff_dashboard")
-
-        return "Invalid credentials!"
+                return redirect("/staff")
+        else:
+            return render_template("login.html", error="Invalid credentials")
 
     return render_template("login.html")
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
 
-# ---------------------- STUDENT ROUTES ----------------------
-@app.route("/student_dashboard")
+# --------------------------
+# STUDENT DASHBOARD
+# --------------------------
+@app.route("/student")
 def student_dashboard():
     if "role" not in session or session["role"] != "student":
         return redirect("/login")
-    return render_template("student_dashboard.html")
 
-
-@app.route("/submit_request", methods=["POST"])
-def submit_request():
-    if "role" not in session or session["role"] != "student":
-        return redirect("/login")
-
-    comment = request.form.get("comment")
-    file = request.files["receipt"]
-
-    filename = file.filename
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
+    email = session["email"]
 
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
-    c.execute("""
-        INSERT INTO requests (student_id, receipt_file, comment)
-        VALUES (?, ?, ?)
-    """, (session["user_id"], filename, comment))
+
+    c.execute("SELECT name, iban FROM students WHERE email=?", (email,))
+    student = c.fetchone()
+
+    c.execute("SELECT id, filename, comment, status FROM requests WHERE student_email=?", (email,))
+    reqs = c.fetchall()
+
+    conn.close()
+
+    return render_template("student_dashboard.html", student=student, requests=reqs)
+
+@app.route("/submit_info", methods=["POST"])
+def submit_info():
+    name = request.form["name"]
+    iban = request.form["iban"]
+    email = session["email"]
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("REPLACE INTO students VALUES (?, ?, ?)", (email, name, iban))
     conn.commit()
     conn.close()
 
-    return "Request submitted successfully!"
+    return redirect("/student")
 
+@app.route("/submit_request", methods=["POST"])
+def submit_request():
+    file = request.files["receipt"]
+    comment = request.form.get("comment", "")
+    filename = file.filename
+    file.save(os.path.join("static/uploads", filename))
 
-# ---------------------- STAFF ROUTES ----------------------
-@app.route("/staff_dashboard")
+    email = session["email"]
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO requests (student_email, filename, comment) VALUES (?, ?, ?)",
+              (email, filename, comment))
+    conn.commit()
+    conn.close()
+
+    return redirect("/student")
+
+# --------------------------
+# STAFF DASHBOARD
+# --------------------------
+@app.route("/staff")
 def staff_dashboard():
     if "role" not in session or session["role"] != "staff":
         return redirect("/login")
 
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
-    c.execute("""
-        SELECT r.id, u.email, r.receipt_file, r.comment, r.status
-        FROM requests r
-        JOIN users u ON r.student_id = u.id
-    """)
-    requests_list = c.fetchall()
+    c.execute("SELECT * FROM requests")
+    reqs = c.fetchall()
     conn.close()
 
-    return render_template("staff_dashboard.html", requests=requests_list)
+    return render_template("staff_dashboard.html", requests=reqs)
 
-
-@app.route("/review_request/<int:req_id>/<string:action>")
-def review_request(req_id, action):
-    if "role" not in session or session["role"] != "staff":
-        return redirect("/login")
+@app.route("/review_request/<int:id>/<action>")
+def review_request(id, action):
+    status = "Approved" if action == "approve" else "Rejected"
 
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
-    new_status = "Approved" if action == "approve" else "Rejected"
-    c.execute("UPDATE requests SET status=? WHERE id=?", (new_status, req_id))
+    c.execute("UPDATE requests SET status=? WHERE id=?", (status, id))
     conn.commit()
     conn.close()
 
-    return redirect("/staff_dashboard")
+    return redirect("/staff")
 
 
-# ---------------------- RUN ----------------------
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
