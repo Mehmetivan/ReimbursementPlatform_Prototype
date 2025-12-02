@@ -40,7 +40,7 @@ def init_db():
         )
     """)
 
-    # Seed users if empty
+    # Seed default users if empty
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO users VALUES ('student@uni.ro', '123', 'student')")
@@ -51,6 +51,7 @@ def init_db():
 
 init_db()
 
+
 # --------------------------
 # ROUTES
 # --------------------------
@@ -58,6 +59,10 @@ init_db()
 def index():
     return redirect("/login")
 
+
+# --------------------------
+# LOGIN
+# --------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -74,26 +79,25 @@ def login():
             session["email"] = user[0]
             session["role"] = user[1]
 
-            if user[1] == "student":
-                return redirect("/student")
-            else:
-                return redirect("/staff")
-        else:
-            return render_template("login.html", error="Invalid credentials")
+            return redirect("/student" if user[1] == "student" else "/staff")
+
+        return render_template("login.html", error="Invalid credentials")
 
     return render_template("login.html")
+
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
+
 # --------------------------
 # STUDENT DASHBOARD
 # --------------------------
 @app.route("/student")
 def student_dashboard():
-    if "role" not in session or session["role"] != "student":
+    if session.get("role") != "student":
         return redirect("/login")
 
     email = session["email"]
@@ -111,6 +115,7 @@ def student_dashboard():
 
     return render_template("student_dashboard.html", student=student, requests=reqs)
 
+
 @app.route("/submit_info", methods=["POST"])
 def submit_info():
     name = request.form["name"]
@@ -124,6 +129,7 @@ def submit_info():
     conn.close()
 
     return redirect("/student")
+
 
 @app.route("/submit_request", methods=["POST"])
 def submit_request():
@@ -143,12 +149,13 @@ def submit_request():
 
     return redirect("/student")
 
+
 # --------------------------
-# STAFF DASHBOARD
+# STAFF DASHBOARD (REQUESTS)
 # --------------------------
 @app.route("/staff")
 def staff_dashboard():
-    if "role" not in session or session["role"] != "staff":
+    if session.get("role") != "staff":
         return redirect("/login")
 
     conn = sqlite3.connect("database.db")
@@ -159,8 +166,12 @@ def staff_dashboard():
 
     return render_template("staff_dashboard.html", requests=reqs)
 
+
 @app.route("/review_request/<int:id>/<action>")
 def review_request(id, action):
+    if session.get("role") != "staff":
+        return redirect("/login")
+
     status = "Approved" if action == "approve" else "Rejected"
 
     conn = sqlite3.connect("database.db")
@@ -172,5 +183,75 @@ def review_request(id, action):
     return redirect("/staff")
 
 
+# --------------------------
+# STAFF — MANAGE STUDENTS
+# --------------------------
+@app.route("/manage_students")
+def manage_students():
+    if session.get("role") != "staff":
+        return redirect("/login")
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("SELECT email FROM users WHERE role='student'")
+    students = c.fetchall()
+    conn.close()
+
+    return render_template("manage_students.html", students=students)
+
+
+@app.route("/add_student", methods=["POST"])
+def add_student():
+    if session.get("role") != "staff":
+        return redirect("/login")
+
+    email = request.form["email"]
+    password = request.form["password"]
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, 'student')",
+              (email, password))
+    conn.commit()
+    conn.close()
+
+    return redirect("/manage_students")
+
+
+@app.route("/delete_student/<email>")
+def delete_student(email):
+    if session.get("role") != "staff":
+        return redirect("/login")
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE email=?", (email,))
+    c.execute("DELETE FROM requests WHERE student_email=?", (email,))
+    conn.commit()
+    conn.close()
+
+    return redirect("/manage_students")
+
+
+@app.route("/update_student", methods=["POST"])
+def update_student():
+    if session.get("role") != "staff":
+        return redirect("/login")
+
+    email = request.form["email"]
+    new_password = request.form["new_password"]
+
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("UPDATE users SET password=? WHERE email=?", (new_password, email))
+    conn.commit()
+    conn.close()
+
+    return redirect("/manage_students")
+
+
+# --------------------------
+# RUN SERVER
+# --------------------------
 if __name__ == "__main__":
     app.run(debug=True)
