@@ -205,14 +205,34 @@ def add_student():
     if session.get("role") != "staff":
         return redirect("/login")
 
+    name = request.form["name"]
     email = request.form["email"]
     password = request.form["password"]
 
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
-    c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, 'student')",
-              (email, password))
-    conn.commit()
+
+    try:
+
+        c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, 'student')",
+                (email, password))
+        
+        
+        c.execute(
+            "INSERT INTO students (email, name, iban) VALUES (?, ?, NULL)",
+            (email, name))
+
+        conn.commit()
+
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        conn.close()
+        return render_template(
+            "manage_students.html",
+            error="A student with this email already exists.",
+            students=get_students()
+        )
+
     conn.close()
 
     return redirect("/manage_students")
@@ -226,6 +246,7 @@ def delete_student(email):
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
     c.execute("DELETE FROM users WHERE email=?", (email,))
+    c.execute("DELETE FROM students WHERE email=?", (email,))
     c.execute("DELETE FROM requests WHERE student_email=?", (email,))
     conn.commit()
     conn.close()

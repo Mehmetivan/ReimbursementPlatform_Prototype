@@ -9,7 +9,9 @@
 <div class="container mt-4">
 
     <div class="d-flex justify-content-between">
-        <h2>Welcome, Student</h2>
+        <h2>Welcome,     {% if student and student[0] %}
+        {{ student[0] }}
+    {% endif %}</h2>
         <a class="btn btn-outline-danger" href="/logout">Logout</a>
     
 
