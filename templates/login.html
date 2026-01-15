@@ -10,15 +10,21 @@
 
 <div class="container d-flex justify-content-center align-items-center" style="min-height: 100vh;">
     <div class="col-md-5 col-lg-4">
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-4">
 
-                <h2 class="text-center fw-bold mb-2">
+        <div class="card shadow-sm border-0">
+
+            <!-- Card Header -->
+            <div class="card-header bg-white border-0 pt-4 pb-2">
+                <h3 class="text-center fw-bold mb-1">
                     Student Reimbursement Portal
-                </h2>
-                <p class="text-center text-muted mb-4">
+                </h3>
+                <p class="text-center text-muted small mb-0">
                     Access for students and staff
                 </p>
+            </div>
+
+            <!-- Card Body -->
+            <div class="card-body p-4">
 
                 {% if error %}
                 <div class="alert alert-danger text-center">
@@ -29,12 +35,23 @@
                 <form method="POST">
                     <div class="mb-3">
                         <label class="form-label">University Email</label>
-                        <input class="form-control" type="email" name="email" placeholder="name@university.edu" required>
+                        <input
+                            class="form-control"
+                            type="email"
+                            name="email"
+                            placeholder="name@university.edu"
+                            required
+                        >
                     </div>
 
                     <div class="mb-4">
                         <label class="form-label">Password</label>
-                        <input class="form-control" type="password" name="password" required>
+                        <input
+                            class="form-control"
+                            type="password"
+                            name="password"
+                            required
+                        >
                     </div>
 
                     <button class="btn btn-primary w-100 fw-semibold">
@@ -45,9 +62,11 @@
             </div>
         </div>
 
+        <!-- Footer -->
         <p class="text-center text-muted small mt-3">
             © 2025 UVT Reimbursement System
         </p>
+
     </div>
 </div>
 
